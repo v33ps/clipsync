@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
     gtk_main();
     
     // now that we have the clipboard content write it to the server
-    if((write(sockfd, gtext, sizeof(gtext)) < 0) {
+    if((write(sockfd, gtext, sizeof(gtext))) < 0) {
         printf("error syncing clipboard: %s\n", strerror(errno));
         exit(1);
     }
@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
 // build the socket and connect to the server
 int client_setup(int *sockfd, struct sockaddr_in *servaddr, char* port, char* ip)
 { 
-    struct hostent *he { 0 };
+    struct hostent *he = { 0 };
     struct sockaddr_in dest_addr = { 0 };
 
     // make sure the destination address if valid
