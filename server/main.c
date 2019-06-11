@@ -56,8 +56,6 @@ int main(int argc, char *argv[]) {
     // GDK_SELECTION_SECONDARY.
     GtkClipboard* clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
 
-
-
 	while(1) {
         int cliSock = 0;
         if (0 > (cliSock = accept(sockfd, 

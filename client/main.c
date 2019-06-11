@@ -1,6 +1,5 @@
 #include <stdio.h> 
 #include <stdlib.h> 
-#include <errno.h> 
 #include <string.h> 
 #include <netdb.h> 
 #include <sys/types.h> 
@@ -11,84 +10,64 @@
 #include <gdk/gdk.h>
 #include <gtk/gtk.h>
 
-#define MAX_SIZE    1024
-#define PORT        4445
 
-// create a global that will contain what @text contains now
-// this way we can get it out of text_request_callback
-// and write it over the socket
+// most of the clipboard stuff was taken from:
+// https://github.com/bstpierre/gtk-examples/blob/master/c/
+
+// global that holds the clipboard contents
 gchar *gtext = { 0 };
 
-void text_request_callback(GtkClipboard *clipboard,
-                           const gchar *text,
-                           gpointer data)
-{
-    // To demonstrate setting a new value into the clipboard, we
-    // choose some text.
-    gtext = calloc(500, sizeof gtext);
-    gtext = gtk_clipboard_wait_for_text(clipboard);
-
-    printf("Clipboard text was %s, value is %8X\n",
-           gtext, *(int*)data);
-
-    gtk_main_quit();
-}
-
-
-int client_setup(int *sockfd, struct sockaddr_in *servaddr);
-void teardown(int sockfd, FILE *fp);
+int client_setup(int *sockfd, struct sockaddr_in *servaddr, char* port, char* ip);
+void text_request_callback(GtkClipboard *clipboard, const gchar *text, gpointer data);
 
 int main(int argc, char *argv[])
 {
-    // define a buffer of max size
-    unsigned char buf[MAX_SIZE] = { 0 };
-    int bytes_read = 0;
-    int bytes_written = 0;
+    if(argc < 2) {
+        printf("clipsync ip port\n");
+        exit(1);
+    }
+
     int sockfd = 0;
     struct sockaddr_in servaddr = { 0 };
+
     // open a socket to the destination server
-     if(client_setup(&sockfd, &servaddr) < 0) {
+     if(client_setup(&sockfd, &servaddr, argv[2], argv[1]) < 0) {
         exit(0);
     }
 
     gtk_init(&argc, &argv);
 
-    // Get a handle to the given clipboard. You can also ask for
-    // GDK_SELECTION_PRIMARY (the X "primary selection") or
-    // GDK_SELECTION_SECONDARY.
+    // Get a handle to the given clipboard. 
     GtkClipboard* clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
 
-    // This is just an arbitrary value to pass through to the
-    // callback. You could pass a pointer to a local struct or
-    // something similar if that was useful to you.
+    // This is just an arbitrary value to pass through to the callback. 
     int value = 0xDECAFBAD;
 
-    // There are more complex things you can place in the clipboard,
-    // but this demonstrates text. The callback will be invoked when
-    // the clipboard contents has been received.
-    //
-    // For a much simpler method of getting the text in the clipboard,
-    // see gtk_clipboard_wait_for_text(), which is used in the example
-    // program clipboard_watch.
+    // call text_request_callback to get the text from the clipboard
     gtk_clipboard_request_text(clipboard, text_request_callback, &value);
 
     // We have to run the GTK main loop so that the events required to
     // fetch the clipboard contents can be processed.
     gtk_main();
-    write(sockfd, gtext, sizeof(gtext));
+    
+    // now that we have the clipboard content write it to the server
+    if((write(sockfd, gtext, sizeof(gtext)) < 0) {
+        printf("error syncing clipboard: %s\n", strerror(errno));
+        exit(1);
+    }
 
     return 0;
 }
 
 
 // build the socket and connect to the server
-int client_setup(int *sockfd, struct sockaddr_in *servaddr)
+int client_setup(int *sockfd, struct sockaddr_in *servaddr, char* port, char* ip)
 { 
-    struct hostent *he;
-    struct sockaddr_in dest_addr;
+    struct hostent *he { 0 };
+    struct sockaddr_in dest_addr = { 0 };
 
     // make sure the destination address if valid
-    if ((he=gethostbyname("127.0.0.1")) == NULL) {
+    if ((he=gethostbyname(ip)) == NULL) {
         herror("gethostbyname");
         return -1;
     }
@@ -100,7 +79,7 @@ int client_setup(int *sockfd, struct sockaddr_in *servaddr)
     }
 
     dest_addr.sin_family = AF_INET;      // host byte order
-    dest_addr.sin_port = htons(PORT);    // short, network byte order 
+    dest_addr.sin_port = htons(atoi(port));    // short, network byte order 
     dest_addr.sin_addr = *((struct in_addr *)he->h_addr);
     bzero(&(dest_addr.sin_zero), 8);     // zero the rest of the struct
 
@@ -113,9 +92,17 @@ int client_setup(int *sockfd, struct sockaddr_in *servaddr)
     return 0;
 }
 
-void teardown(int sockfd, FILE *fp) 
+void text_request_callback(GtkClipboard *clipboard, const gchar *text, gpointer data)
 {
-    printf("teardown\n");
-    close(sockfd);
-    fclose(fp);
+    // since @gtext is a global, calloc in here
+    gtext = calloc(500, sizeof gtext);
+
+    // get the clipboard text
+    gtext = gtk_clipboard_wait_for_text(clipboard);
+
+    printf("Clipboard text was %s, value is %8X\n",
+           gtext, *(int*)data);
+
+    // we are done using the clipboard so clean up
+    gtk_main_quit();
 }
